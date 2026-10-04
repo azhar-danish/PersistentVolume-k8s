@@ -1,6 +1,8 @@
 
 1. Creating a Persistent Volume (PV) in Kubernetes allows you to define a storage resource that can be used by your pods. Below is an example of a YAML configuration for a Persistent Volume:
 
+
+
 apiVersion: v1
 kind: PersistentVolume
 metadata:
