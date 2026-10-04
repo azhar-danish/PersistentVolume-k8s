@@ -14,7 +14,7 @@ spec:
   capacity:
     storage: 1Gi
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteOnce   # Requests a volume that can map read-write to a single node
   hostPath:
     path: /mnt/data
 
@@ -72,3 +72,13 @@ spec:
     cat index.html
     cat hello.txt
 
+
+
+Access Mode	        Abbreviation	Node Access	        Pod Access	                    Typical Storage Type
+ReadWriteOnce	    RWO	            Single Node	        Multiple Pods (on that node)	Cloud Block Storage (EBS, Azure Disk, GCE PD)
+
+ReadWriteOncePod	RWOP	        Single Node	        Strictly One Pod cluster-wide	CSI-supported volumes (introduced in v1.22)
+
+ReadWriteMany	    RWX	            Multiple Nodes	    Multiple Pods across nodes	    Shared File Systems (NFS, CephFS, GlusterFS)
+
+ReadOnlyMany	    ROX	            Multiple Nodes	    Multiple Pods (Read-Only)	    Shared Assets / Configuration data
