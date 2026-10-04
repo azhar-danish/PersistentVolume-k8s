@@ -34,12 +34,6 @@ azhardanish@Azhars-MacBook-Air mongodb-pv-kind %
 
 Create three directories inside that KIND node's Docker container (cka-bestseller-cluster2-worker2 node) to be used as persistent volumes for MongoDB. You can do this by executing the following commands:
 
-docker exec cka-bestseller-cluster2-worker2 mkdir -p /mnt/mongodb/mongodb-0
-
-docker exec cka-bestseller-cluster2-worker2 mkdir -p /mnt/mongodb/mongodb-1
-
-docker exec cka-bestseller-cluster2-worker2 mkdir -p /mnt/mongodb/mongodb-2
-
 
 docker exec -it cka-bestseller-cluster2-worker2 /bin/bash 
 
@@ -93,6 +87,8 @@ azhardanish@Azhars-MacBook-Air mongodb-pv-kind %
 
 Create three PersistentVolumes
 
+pv.yml
+--------------
 apiVersion: v1
 kind: PersistentVolume
 metadata:
@@ -182,7 +178,7 @@ spec:
               values:
                 - cka-bestseller-cluster2-worker2
 
-
+--------------
 
 
 azhardanish@Azhars-MacBook-Air mongodb-pv-kind % k apply -f pv.yml 
@@ -205,7 +201,8 @@ Notice that PVs are currently Available, because no PVC has claimed them yet.
 
 Create Headless Service
 
-
+service.yaml
+--------------------
 apiVersion: v1
 kind: Service
 metadata:
@@ -223,7 +220,7 @@ spec:
       port: 27017
       targetPort: 27017
       protocol: TCP
-
+---------------------
     
 azhardanish@Azhars-MacBook-Air mongodb-pv-kind % k get svc
 No resources found in mongodb-namespace namespace.
