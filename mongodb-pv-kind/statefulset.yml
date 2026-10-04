@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: StatefulSet
+
+metadata:
+  name: mongodb
+  namespace: mongodb-namespace
+
+spec:
+  serviceName: mongodb
+  replicas: 3
+
+  selector:
+    matchLabels:
+      app: mongodb
+
+  template:
+    metadata:
+      labels:
+        app: mongodb
+
+    spec:
+      terminationGracePeriodSeconds: 60
+
+      containers:
+        - name: mongodb
+
+          image: mongo:8.0
+
+          imagePullPolicy: IfNotPresent
+
+          command:
+            - mongod
+            - "--replSet"
+            - "rs0"
+            - "--bind_ip_all"
+
+          ports:
+            - name: mongodb
+              containerPort: 27017
+
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /data/db
+
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+
+            limits:
+              cpu: "1"
+              memory: 1Gi
+
+  volumeClaimTemplates:
+    - metadata:
+        name: mongodb-data
+
+      spec:
+        accessModes:
+          - ReadWriteOnce
+
+        storageClassName: mongodb-local
+
+        resources:
+          requests:
+            storage: 2Gi

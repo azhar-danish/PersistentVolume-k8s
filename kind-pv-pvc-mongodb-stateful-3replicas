@@ -1,0 +1,625 @@
+1. kind get clusters
+
+azhardanish@Azhars-MacBook-Air persistent-volume % kind get clusters
+cka-bestseller-cluster2
+
+azhardanish@Azhars-MacBook-Air persistent-volume % k get nodes -o wide
+
+
+NAME                                    STATUS   ROLES           AGE     VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE                         KERNEL-VERSION     CONTAINER-RUNTIME
+cka-bestseller-cluster2-control-plane   Ready    control-plane   3d20h   v1.35.0   172.18.0.3    <none>        Debian GNU/Linux 12 (bookworm)   6.12.76-linuxkit   containerd://2.2.0
+
+cka-bestseller-cluster2-worker          Ready    <none>          3d20h   v1.35.0   172.18.0.2    <none>        Debian GNU/Linux 12 (bookworm)   6.12.76-linuxkit   containerd://2.2.0
+
+cka-bestseller-cluster2-worker2         Ready    <none>          3d20h   v1.35.0   172.18.0.4    <none>        Debian GNU/Linux 12 (bookworm)   6.12.76-linuxkit   containerd://2.2.0
+
+create namespace mongodb-namespace
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mongodb-namespace
+
+kubectl config set-context --current --namespace mongodb-namespace 
+
+
+
+azhardanish@Azhars-MacBook-Air mongodb-pv-kind % k get nodes
+NAME                                    STATUS   ROLES           AGE     VERSION
+cka-bestseller-cluster2-control-plane   Ready    control-plane   3d21h   v1.35.0
+cka-bestseller-cluster2-worker          Ready    <none>          3d21h   v1.35.0
+cka-bestseller-cluster2-worker2         Ready    <none>          3d21h   v1.35.0
+azhardanish@Azhars-MacBook-Air mongodb-pv-kind % 
+
+
+Create three directories inside that KIND node's Docker container (cka-bestseller-cluster2-worker2 node) to be used as persistent volumes for MongoDB. You can do this by executing the following commands:
+
+docker exec cka-bestseller-cluster2-worker2 mkdir -p /mnt/mongodb/mongodb-0
+
+docker exec cka-bestseller-cluster2-worker2 mkdir -p /mnt/mongodb/mongodb-1
+
+docker exec cka-bestseller-cluster2-worker2 mkdir -p /mnt/mongodb/mongodb-2
+
+
+docker exec -it cka-bestseller-cluster2-worker2 /bin/bash 
+
+root@cka-bestseller-cluster2-worker2:/# cd /mnt 
+root@cka-bestseller-cluster2-worker2:/mnt# mkdir -p mongodb/mongodb-0
+root@cka-bestseller-cluster2-worker2:/mnt# ls 
+mongodb
+root@cka-bestseller-cluster2-worker2:/mnt# cd mongodb
+root@cka-bestseller-cluster2-worker2:/mnt/mongodb# ls
+mongodb-0
+root@cka-bestseller-cluster2-worker2:/mnt/mongodb# mkdir mongodb-1
+root@cka-bestseller-cluster2-worker2:/mnt/mongodb# mkdir mongodb-2
+root@cka-bestseller-cluster2-worker2:/mnt/mongodb# ls
+mongodb-0  mongodb-1  mongodb-2
+root@cka-bestseller-cluster2-worker2:/mnt/mongodb# cd ..
+root@cka-bestseller-cluster2-worker2:/mnt# ls -lh
+total 4.0K
+drwxr-xr-x 5 root root 4.0K Oct  4 06:28 mongodb
+
+Give full permissions to the mongodb directory and its subdirectories to ensure that the MongoDB pods can read and write data without permission issues. You can do this by running the following command:
+
+
+root@cka-bestseller-cluster2-worker2:/mnt# chmod -R 777 mongodb/
+root@cka-bestseller-cluster2-worker2:/mnt# ls -lh
+total 4.0K
+drwxrwxrwx 5 root root 4.0K Oct  4 06:28 mongodb
+root@cka-bestseller-cluster2-worker2:/mnt#  
+exit
+
+create storage class for mongodb
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: mongodb-local
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: WaitForFirstConsumer
+
+
+Why no-provisioner?
+
+Because we're creating PVs manually. Unlike AWS EBS, KIND doesn't have a cloud storage provisioner to create disks automatically.
+
+
+azhardanish@Azhars-MacBook-Air mongodb-pv-kind % k get sc
+NAME                 PROVISIONER                    RECLAIMPOLICY   VOLUMEBINDINGMODE      ALLOWVOLUMEEXPANSION   AGE
+mongodb-local        kubernetes.io/no-provisioner   Delete          WaitForFirstConsumer   false                  43s
+standard (default)   rancher.io/local-path          Delete          WaitForFirstConsumer   false                  3d21h
+azhardanish@Azhars-MacBook-Air mongodb-pv-kind % 
+
+
+Create three PersistentVolumes
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongodb-pv-0
+spec:
+  capacity:
+    storage: 2Gi
+
+  volumeMode: Filesystem
+
+  accessModes:
+    - ReadWriteOnce
+
+  persistentVolumeReclaimPolicy: Retain
+
+  storageClassName: mongodb-local
+
+  local:
+    path: /mnt/mongodb/mongodb-0
+
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - cka-bestseller-cluster2-worker2
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongodb-pv-1
+spec:
+  capacity:
+    storage: 2Gi
+
+  volumeMode: Filesystem
+
+  accessModes:
+    - ReadWriteOnce
+
+  persistentVolumeReclaimPolicy: Retain
+
+  storageClassName: mongodb-local
+
+  local:
+    path: /mnt/mongodb/mongodb-1
+
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - cka-bestseller-cluster2-worker2
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongodb-pv-2
+spec:
+  capacity:
+    storage: 2Gi
+
+  volumeMode: Filesystem
+
+  accessModes:
+    - ReadWriteOnce
+
+  persistentVolumeReclaimPolicy: Retain
+
+  storageClassName: mongodb-local
+
+  local:
+    path: /mnt/mongodb/mongodb-2
+
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - cka-bestseller-cluster2-worker2
+
+
+
+
+azhardanish@Azhars-MacBook-Air mongodb-pv-kind % k apply -f pv.yml 
+persistentvolume/mongodb-pv-0 created
+persistentvolume/mongodb-pv-1 created
+persistentvolume/mongodb-pv-2 created
+
+azhardanish@Azhars-MacBook-Air mongodb-pv-kind % k get pv
+
+NAME             CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS      CLAIM               STORAGECLASS    VOLUMEATTRIBUTESCLASS   REASON   AGE
+mongodb-pv-0     2Gi        RWO            Retain           Available                       mongodb-local   <unset>                          5s
+mongodb-pv-1     2Gi        RWO            Retain           Available                       mongodb-local   <unset>                          5s
+mongodb-pv-2     2Gi        RWO            Retain           Available                       mongodb-local   <unset>                          5s
+test-pv-volume   1Gi        RWO            Retain           Bound       dev/test-pv-claim                   <unset>                          16h
+azhardanish@Azhars-MacBook-Air mongodb-pv-kind % 
+
+
+Notice that PVs are currently Available, because no PVC has claimed them yet.
+
+
+Create Headless Service
+
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb
+  namespace: mongodb-namespace
+
+spec:
+  clusterIP: None
+
+  selector:
+    app: mongodb
+
+  ports:
+    - name: mongodb
+      port: 27017
+      targetPort: 27017
+      protocol: TCP
+
+    
+azhardanish@Azhars-MacBook-Air mongodb-pv-kind % k get svc
+No resources found in mongodb-namespace namespace.
+
+azhardanish@Azhars-MacBook-Air mongodb-pv-kind % k apply -f service.yaml 
+service/mongodb created
+
+azhardanish@Azhars-MacBook-Air mongodb-pv-kind % k get svc
+NAME      TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)     AGE
+mongodb   ClusterIP   None         <none>        270
+
+
+Why do we need this?
+
+It provides stable DNS names for the MongoDB Pods:
+
+mongodb-0.mongodb.mongodb.svc.cluster.local
+
+mongodb-1.mongodb.mongodb.svc.cluster.local
+
+mongodb-2.mongodb.mongodb.svc.cluster.local
+
+These DNS names will be used by the MongoDB replica set.
+
+
+
+Create MongoDB StatefulSet
+
+statefulset.yml
+--------------
+apiVersion: apps/v1
+kind: StatefulSet
+
+metadata:
+  name: mongodb
+  namespace: mongodb-namespace
+
+spec:
+  serviceName: mongodb
+  replicas: 3
+
+  selector:
+    matchLabels:
+      app: mongodb
+
+  template:
+    metadata:
+      labels:
+        app: mongodb
+
+    spec:
+      terminationGracePeriodSeconds: 60
+
+      containers:
+        - name: mongodb
+
+          image: mongo:8.0
+
+          imagePullPolicy: IfNotPresent
+
+          command:
+            - mongod
+            - "--replSet"
+            - "rs0"
+            - "--bind_ip_all"
+
+          ports:
+            - name: mongodb
+              containerPort: 27017
+
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /data/db
+
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+
+            limits:
+              cpu: "1"
+              memory: 1Gi
+
+  volumeClaimTemplates:
+    - metadata:
+        name: mongodb-data
+
+      spec:
+        accessModes:
+          - ReadWriteOnce
+
+        storageClassName: mongodb-local
+
+        resources:
+          requests:
+            storage: 2Gi
+--------------
+
+azhardanish@Azhars-MacBook-Air mongodb-pv-kind % k apply -f statefulset.yml
+
+azhardanish@Azhars-MacBook-Air mongodb-pv-kind % k get all
+NAME            READY   STATUS    RESTARTS   AGE
+pod/mongodb-0   1/1     Running   0          2m58s
+pod/mongodb-1   1/1     Running   0          103s
+pod/mongodb-2   1/1     Running   0          101s
+
+NAME              TYPE        CLUSTER-IP   EXTERNAL-IP   PORT(S)     AGE
+service/mongodb   ClusterIP   None         <none>        27017/TCP   7m37s
+
+NAME                       READY   AGE
+statefulset.apps/mongodb   3/3     2m58s
+azhardanish@Azhars-MacBook-Air mongodb-pv-kind % 
+
+Now pvc automatically created for each pod in the statefulset. You can check the PVCs by running the following command:
+
+azhardanish@Azhars-MacBook-Air mongodb-pv-kind % k get pvc
+NAME                     STATUS   VOLUME         CAPACITY   ACCESS MODES   STORAGECLASS    VOLUMEATTRIBUTESCLASS   AGE
+mongodb-data-mongodb-0   Bound    mongodb-pv-0   2Gi        RWO            mongodb-local   <unset>                 24m
+mongodb-data-mongodb-1   Bound    mongodb-pv-1   2Gi        RWO            mongodb-local   <unset>                 23m
+mongodb-data-mongodb-2   Bound    mongodb-pv-2   2Gi        RWO            mongodb-local   <unset>                 23m
+azhardanish@Azhars-MacBook-Air mongodb-pv-kind % 
+
+
+Your complete relationship:
+
+StatefulSet: mongodb
+      |
+      |
+      ├── mongodb-0
+      |      |
+      |      └── mongodb-data-mongodb-0 (PVC)
+      |                 |
+      |                 └── mongodb-pv-0 (PV)
+      |                            |
+      |                            └── /mnt/mongodb/mongodb-0
+      |
+      ├── mongodb-1
+      |      |
+      |      └── mongodb-data-mongodb-1 (PVC)
+      |                 |
+      |                 └── mongodb-pv-1 (PV)
+      |                            |
+      |                            └── /mnt/mongodb/mongodb-1
+      |
+      └── mongodb-2
+             |
+             └── mongodb-data-mongodb-2 (PVC)
+                        |
+                        └── mongodb-pv-2 (PV)
+                                   |
+                                   └── /mnt/mongodb/mongodb-2
+
+
+azhardanish@Azhars-MacBook-Air mongodb-pv-kind % k get po
+NAME        READY   STATUS    RESTARTS   AGE
+mongodb-0   1/1     Running   0          45m
+mongodb-1   1/1     Running   0          44m
+mongodb-2   1/1     Running   0          43m
+
+k exec -it mongodb-0 -- mongosh
+
+execute the following command to initiate the replica set:
+
+rs.initiate({
+  _id: "rs0",
+  members: [
+    {
+      _id: 0,
+      host: "mongodb-0.mongodb.mongodb-namespace.svc.cluster.local:27017"
+    },
+    {
+      _id: 1,
+      host: "mongodb-1.mongodb.mongodb-namespace.svc.cluster.local:27017"
+    },
+    {
+      _id: 2,
+      host: "mongodb-2.mongodb.mongodb-namespace.svc.cluster.local:27017"
+    }
+  ]
+})
+
+
+rs.status()
+
+output
+------------------------
+{
+  set: 'rs0',
+  date: ISODate('2026-10-04T07:49:20.928Z'),
+  myState: 1,
+  term: Long('1'),
+  syncSourceHost: '',
+  syncSourceId: -1,
+  heartbeatIntervalMillis: Long('2000'),
+  majorityVoteCount: 2,
+  writeMajorityCount: 2,
+  votingMembersCount: 3,
+  writableVotingMembersCount: 3,
+  optimes: {
+    lastCommittedOpTime: { ts: Timestamp({ t: 1791100143, i: 16 }), t: Long('1') },
+    lastCommittedWallTime: ISODate('2026-10-04T07:49:03.753Z'),
+    readConcernMajorityOpTime: { ts: Timestamp({ t: 1791100143, i: 16 }), t: Long('1') },
+    appliedOpTime: { ts: Timestamp({ t: 1791100143, i: 16 }), t: Long('1') },
+    durableOpTime: { ts: Timestamp({ t: 1791100143, i: 16 }), t: Long('1') },
+    writtenOpTime: { ts: Timestamp({ t: 1791100143, i: 16 }), t: Long('1') },
+    lastAppliedWallTime: ISODate('2026-10-04T07:49:03.753Z'),
+    lastDurableWallTime: ISODate('2026-10-04T07:49:03.753Z'),
+    lastWrittenWallTime: ISODate('2026-10-04T07:49:03.753Z')
+  },
+  lastStableRecoveryTimestamp: Timestamp({ t: 1791100132, i: 1 }),
+  electionCandidateMetrics: {
+    lastElectionReason: 'electionTimeout',
+    lastElectionDate: ISODate('2026-10-04T07:49:03.676Z'),
+    electionTerm: Long('1'),
+    lastCommittedOpTimeAtElection: { ts: Timestamp({ t: 1791100132, i: 1 }), t: Long('-1') },
+    lastSeenWrittenOpTimeAtElection: { ts: Timestamp({ t: 1791100132, i: 1 }), t: Long('-1') },
+    lastSeenOpTimeAtElection: { ts: Timestamp({ t: 1791100132, i: 1 }), t: Long('-1') },
+    numVotesNeeded: 2,
+    priorityAtElection: 1,
+    electionTimeoutMillis: Long('10000'),
+    numCatchUpOps: Long('0'),
+    newTermStartDate: ISODate('2026-10-04T07:49:03.722Z'),
+    wMajorityWriteAvailabilityDate: ISODate('2026-10-04T07:49:04.197Z')
+  },
+  members: [
+    {
+      _id: 0,
+      name: 'mongodb-0.mongodb.mongodb-namespace.svc.cluster.local:27017',
+      health: 1,
+      state: 1,
+      stateStr: 'PRIMARY',
+      uptime: 3203,
+      optime: { ts: Timestamp({ t: 1791100143, i: 16 }), t: Long('1') },
+      optimeDate: ISODate('2026-10-04T07:49:03.000Z'),
+      optimeWritten: { ts: Timestamp({ t: 1791100143, i: 16 }), t: Long('1') },
+      optimeWrittenDate: ISODate('2026-10-04T07:49:03.000Z'),
+      lastAppliedWallTime: ISODate('2026-10-04T07:49:03.753Z'),
+      lastDurableWallTime: ISODate('2026-10-04T07:49:03.753Z'),
+      lastWrittenWallTime: ISODate('2026-10-04T07:49:03.753Z'),
+      syncSourceHost: '',
+      syncSourceId: -1,
+      infoMessage: 'Could not find member to sync from',
+      electionTime: Timestamp({ t: 1791100143, i: 1 }),
+      electionDate: ISODate('2026-10-04T07:49:03.000Z'),
+      configVersion: 1,
+      configTerm: 1,
+      self: true,
+      lastHeartbeatMessage: ''
+    },
+    {
+      _id: 1,
+      name: 'mongodb-1.mongodb.mongodb-namespace.svc.cluster.local:27017',
+      health: 1,
+      state: 2,
+      stateStr: 'SECONDARY',
+      uptime: 28,
+      optime: { ts: Timestamp({ t: 1791100143, i: 16 }), t: Long('1') },
+      optimeDurable: { ts: Timestamp({ t: 1791100143, i: 16 }), t: Long('1') },
+      optimeWritten: { ts: Timestamp({ t: 1791100143, i: 16 }), t: Long('1') },
+      optimeDate: ISODate('2026-10-04T07:49:03.000Z'),
+      optimeDurableDate: ISODate('2026-10-04T07:49:03.000Z'),
+      optimeWrittenDate: ISODate('2026-10-04T07:49:03.000Z'),
+      lastAppliedWallTime: ISODate('2026-10-04T07:49:03.753Z'),
+      lastDurableWallTime: ISODate('2026-10-04T07:49:03.753Z'),
+      lastWrittenWallTime: ISODate('2026-10-04T07:49:03.753Z'),
+      lastHeartbeat: ISODate('2026-10-04T07:49:19.718Z'),
+      lastHeartbeatRecv: ISODate('2026-10-04T07:49:20.724Z'),
+      pingMs: Long('0'),
+      lastHeartbeatMessage: '',
+      syncSourceHost: 'mongodb-0.mongodb.mongodb-namespace.svc.cluster.local:27017',
+      syncSourceId: 0,
+      infoMessage: '',
+      configVersion: 1,
+      configTerm: 1
+    },
+    {
+      _id: 2,
+      name: 'mongodb-2.mongodb.mongodb-namespace.svc.cluster.local:27017',
+      health: 1,
+      state: 2,
+      stateStr: 'SECONDARY',
+      uptime: 28,
+      optime: { ts: Timestamp({ t: 1791100143, i: 16 }), t: Long('1') },
+      optimeDurable: { ts: Timestamp({ t: 1791100143, i: 16 }), t: Long('1') },
+      optimeWritten: { ts: Timestamp({ t: 1791100143, i: 16 }), t: Long('1') },
+      optimeDate: ISODate('2026-10-04T07:49:03.000Z'),
+      optimeDurableDate: ISODate('2026-10-04T07:49:03.000Z'),
+      optimeWrittenDate: ISODate('2026-10-04T07:49:03.000Z'),
+      lastAppliedWallTime: ISODate('2026-10-04T07:49:03.753Z'),
+      lastDurableWallTime: ISODate('2026-10-04T07:49:03.753Z'),
+      lastWrittenWallTime: ISODate('2026-10-04T07:49:03.753Z'),
+      lastHeartbeat: ISODate('2026-10-04T07:49:19.718Z'),
+      lastHeartbeatRecv: ISODate('2026-10-04T07:49:20.724Z'),
+      pingMs: Long('0'),
+      lastHeartbeatMessage: '',
+      syncSourceHost: 'mongodb-0.mongodb.mongodb-namespace.svc.cluster.local:27017',
+      syncSourceId: 0,
+      infoMessage: '',
+      configVersion: 1,
+      configTerm: 1
+    }
+  ],
+  ok: 1,
+  '$clusterTime': {
+    clusterTime: Timestamp({ t: 1791100143, i: 16 }),
+    signature: {
+      hash: Binary.createFromBase64('AAAAAAAAAAAAAAAAAAAAAAAAAAA=', 0),
+      keyId: Long('0')
+    }
+  },
+  operationTime: Timestamp({ t: 1791100143, i: 16 })
+}
+------------------------
+
+
+rs0 [direct: primary] test> use devlopment
+switched to db devlopment
+
+rs0 [direct: primary] devlopment> db.users.insertOne({
+|   name: "Azhar",
+|   role: "DevOps Engineer",
+|   technology: ["Node.js", "Docker", "Kubernetes", "AWS"]
+| })
+{
+  acknowledged: true,
+  insertedId: ObjectId('6ac20593db7e157a2ea68083')
+}
+
+
+rs0 [direct: primary] devlopment> db.users.find()
+[
+  {
+    _id: ObjectId('6ac20593db7e157a2ea68083'),
+    name: 'Azhar',
+    role: 'DevOps Engineer',
+    technology: [ 'Node.js', 'Docker', 'Kubernetes', 'AWS' ]
+  }
+]
+
+
+Now get pods
+azhardanish@Mac mongodb-pv-kind % k get po
+NAME        READY   STATUS    RESTARTS      AGE
+mongodb-0   1/1     Running   0             5m13s
+mongodb-1   1/1     Running   1 (24m ago)   172m
+mongodb-2   1/1     Running   1 (24m ago)   172m
+
+Delete the pod mongodb-0 to see if it comes back up and retains its data:
+
+azhardanish@Mac mongodb-pv-kind % k delete po mongodb-0          
+pod "mongodb-0" deleted from mongodb-namespace namespace
+
+azhardanish@Mac mongodb-pv-kind % k get po             
+NAME        READY   STATUS    RESTARTS      AGE
+mongodb-0   1/1     Running   0             6s.     => created new pod mongodb-0 and it is running
+mongodb-1   1/1     Running   1 (26m ago)   173m
+mongodb-2   1/1     Running   1 (26m ago)   173m
+azhardanish@Mac mongodb-pv-kind % 
+
+
+k exec -it mongodb-0 -- mongosh
+
+
+rs0 [direct: secondary] test> use devlopment
+switched to db devlopment
+rs0 [direct: secondary] devlopment> db.users.find()
+[
+  {
+    _id: ObjectId('6ac20593db7e157a2ea68083'),
+    name: 'Azhar',
+    role: 'DevOps Engineer',
+    technology: [ 'Node.js', 'Docker', 'Kubernetes', 'AWS' ]
+  }
+]
+rs0 [direct: secondary] devlopment> 
+
+
+now the data is still there, which means the persistent volume is working correctly and the data is retained even after the pod is deleted and recreated.
+
+Now exec int other pods and check the data is still there:
+
+k exec -it mongodb-1 -- mongosh
+
+rs0 [direct: secondary] test> use devlopment
+switched to db devlopment
+rs0 [direct: secondary] devlopment> db.users.find()
+[
+  {
+    _id: ObjectId('6ac20593db7e157a2ea68083'),
+    name: 'Azhar',
+    role: 'DevOps Engineer',
+    technology: [ 'Node.js', 'Docker', 'Kubernetes', 'AWS' ]  
+  }
+]
+rs0 [direct: secondary] devlopment>
+
+Now statefulstate
+
+
